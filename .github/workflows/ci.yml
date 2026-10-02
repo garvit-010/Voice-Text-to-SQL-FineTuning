@@ -16,7 +16,7 @@ jobs:
         env:
           POSTGRES_USER: ci_user
           POSTGRES_PASSWORD: ci_password
-          POSTGRES_DB: ci_db
+          POSTGRES_DB: enterprise_sql
         ports:
           - 5432:5432
         options: >-
@@ -51,9 +51,9 @@ jobs:
         OPENAI_API_KEY: "mock_key"
         APP_DB_USER: "ci_user"
         APP_DB_PASSWORD: "ci_password"
-        APP_DB_HOST: "localhost"
-        APP_DB_PORT: "5432"
-        APP_DB_NAME: "ci_db"
+        PGHOST: "localhost"
+        PGPORT: "5432"
+        PGDATABASE: "enterprise_sql"
         PGSSLMODE: "disable"
         PGSUPERUSER: "ci_user"
         PGSUPERPASSWORD: "ci_password"
