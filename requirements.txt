@@ -24,3 +24,5 @@ psycopg-pool==3.2.4         # connection pool; every connection is configured
                             # read-only with a statement timeout on checkout
 httpx==0.28.1               # required by fastapi.testclient
 python-multipart==0.0.20    # required for file upload in /voice endpoint
+google-genai==0.3.0         # Google Gemini SDK for speech-to-text
+ruff==0.6.9                 # Linter for CI pipeline
