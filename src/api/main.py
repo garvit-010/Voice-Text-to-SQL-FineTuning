@@ -47,6 +47,7 @@ from fastapi import FastAPI, File, HTTPException, Request, Response, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 
+from src.api.observability import metrics, log_structured_event
 from src.api.backends import build_model
 from src.api.schemas import (
     AttemptInfo,
@@ -128,6 +129,9 @@ async def lifespan(app: FastAPI):
         app.state.pool.close()
 
 
+
+
+
 app = FastAPI(
     title="Enterprise Text-to-SQL",
     version="1.0.0",
@@ -168,6 +172,12 @@ def _service(request: Request) -> TextToSQLService:
             detail=request.app.state.startup_error or "service is starting",
         )
     return service
+
+
+@app.get("/metrics", tags=["observability"])
+def get_metrics() -> dict:
+    """Return runtime operational performance, latency, and query metrics."""
+    return metrics.get_summary()
 
 
 @app.get("/health", response_model=HealthResponse, tags=["ops"])
@@ -243,6 +253,25 @@ def query(request: Request, body: QueryRequest) -> QueryResponse:
             status_code=503,
             detail=f"pipeline unavailable: {type(exc).__name__}",
         ) from exc
+
+    # Observability recording & tracing
+    metrics.record_query(
+        ok=result.ok,
+        repaired=result.repaired,
+        generation_ms=result.generation_ms,
+        execution_ms=result.execution_ms,
+        total_ms=round((time.perf_counter() - started) * 1000, 2),
+        error_stage=result.error_stage,
+    )
+    log_structured_event("query_processed", {
+        "question": body.question,
+        "ok": result.ok,
+        "repaired": result.repaired,
+        "sql": result.sql,
+        "row_count": result.row_count,
+        "total_ms": round((time.perf_counter() - started) * 1000, 2),
+        "error_stage": result.error_stage,
+    })
 
     return QueryResponse(
         question=body.question,
@@ -389,6 +418,11 @@ async def voice(audio: UploadFile = File(...)) -> VoiceResponse:
     if not transcript:
         raise HTTPException(status_code=422, detail="Could not transcribe audio — try again")
 
+    metrics.record_voice()
+    log_structured_event("voice_transcribed", {
+        "words": len(transcript.split()),
+        "length_chars": len(transcript),
+    })
     return VoiceResponse(transcript=transcript, words=len(transcript.split()))
 
 
