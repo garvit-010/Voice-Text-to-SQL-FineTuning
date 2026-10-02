@@ -13,7 +13,7 @@ services:
     runtime: python
     plan: free
     region: oregon
-    branch: master
+    branch: main
 
     buildCommand: pip install --no-cache-dir -r requirements.txt
     # $PORT is assigned by Render at runtime; binding to a fixed port fails.
