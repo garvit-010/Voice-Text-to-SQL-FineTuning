@@ -10,6 +10,21 @@ jobs:
   lint-and-test:
     runs-on: ubuntu-latest
 
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: ci_user
+          POSTGRES_PASSWORD: ci_password
+          POSTGRES_DB: ci_db
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
     steps:
     - name: Checkout Code
       uses: actions/checkout@v4
@@ -31,9 +46,16 @@ jobs:
 
     - name: Run Pytest
       env:
-        # Mocking environment variables for tests if needed
         GEMINI_API_KEY: "mock_key"
         HF_TOKEN: "mock_token"
         OPENAI_API_KEY: "mock_key"
+        APP_DB_USER: "ci_user"
+        APP_DB_PASSWORD: "ci_password"
+        APP_DB_HOST: "localhost"
+        APP_DB_PORT: "5432"
+        APP_DB_NAME: "ci_db"
+        PGSSLMODE: "disable"
+        PGSUPERUSER: "ci_user"
+        PGSUPERPASSWORD: "ci_password"
       run: |
-        pytest tests/
+        pytest tests/ -v --tb=short

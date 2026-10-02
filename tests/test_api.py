@@ -42,6 +42,9 @@ WRITE_SQL = "DROP TABLE customers"
 
 @pytest.fixture(scope="module")
 def db():
+    import os
+    if not os.getenv("APP_DB_USER", "").strip():
+        pytest.skip("Database env vars not configured (APP_DB_USER missing)")
     with read_only_connection(app_config()) as conn:
         yield conn
 
@@ -359,3 +362,4 @@ def test_cors_does_not_grant_arbitrary_origins(client):
         "Access-Control-Request-Method": "POST",
     })
     assert "access-control-allow-origin" not in r.headers
+

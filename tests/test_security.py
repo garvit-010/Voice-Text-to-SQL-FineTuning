@@ -85,6 +85,8 @@ INJECTION_QUESTIONS = [
 
 @pytest.fixture(scope="module")
 def db():
+    if not os.getenv("APP_DB_USER", "").strip():
+        pytest.skip("Database env vars not configured (APP_DB_USER missing)")
     with read_only_connection(app_config()) as conn:
         yield conn
 
@@ -250,3 +252,4 @@ def test_oversized_question_is_rejected_before_the_model(client):
     """A megabyte of text should cost nothing: no model call, no database hit."""
     r = client.post("/query", json={"question": "A" * 100_000})
     assert r.status_code == 422
+
