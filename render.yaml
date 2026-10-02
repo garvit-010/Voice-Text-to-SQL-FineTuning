@@ -1,0 +1,81 @@
+# Render blueprint — one-click deploy of the Text-to-SQL API.
+#
+# Render reads this on "New → Blueprint" and configures the service, so nothing
+# has to be typed into a form except the secrets.
+#
+# The database is NOT defined here. Render's free Postgres expires after 90
+# days; Neon's free tier does not, and this database is only 61 MB. So Postgres
+# lives on Neon and its credentials arrive as environment variables.
+
+services:
+  - type: web
+    name: text2sql-api
+    runtime: python
+    plan: free
+    region: oregon
+    branch: master
+
+    buildCommand: pip install --no-cache-dir -r requirements.txt
+    # $PORT is assigned by Render at runtime; binding to a fixed port fails.
+    startCommand: uvicorn src.api.main:app --host 0.0.0.0 --port $PORT
+
+    # Hits the real readiness endpoint, which executes SELECT 1 against
+    # PostgreSQL. A process that is listening but cannot reach its database is
+    # not healthy, and a TCP check would call it healthy.
+    healthCheckPath: /health
+
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.11.9"
+      - key: PYTHONPATH
+        value: "."
+
+      # Serves the BASE model. The fine-tuned adapter needs a GPU, which the
+      # free tier does not have, so this is NOT the 70.86 % pipeline.
+      - key: MODEL_BACKEND
+        value: hf
+      # Prompt v2 adds a business glossary and a DATA_AS_OF reference date.
+      # Costs nothing, needs no GPU, and is worth +9.47 pp to the base model
+      # (34.22 % -> 43.71 % strict, both scored on benchmark v2).
+      - key: PROMPT_VERSION
+        value: v2
+      # Failover chain, tried in order. Free providers flip between fine,
+      # busy, timing out and out-of-credits; depending on one took the demo
+      # down twice. featherless-ai leads because on 2026-09-23 nscale was
+      # returning 504 only after a 121 s timeout, hanging every request.
+      - key: HF_PROVIDER
+        value: featherless-ai,nscale
+      # A person is waiting, so a dead provider is abandoned in seconds rather
+      # than the 120 s a benchmark run can afford.
+      - key: HF_TIMEOUT_S
+        value: "30"
+      - key: HF_MAX_RETRIES
+        value: "4"
+
+      # Managed Postgres refuses plaintext connections.
+      - key: PGSSLMODE
+        value: require
+      - key: PGPORT
+        value: "5432"
+
+      - key: SQL_STATEMENT_TIMEOUT_MS
+        value: "30000"
+      # Neon's free tier caps concurrent connections; a small pool leaves room
+      # for the seeding script and psql to connect alongside the API.
+      - key: DB_POOL_MAX
+        value: "3"
+      - key: DB_POOL_MIN
+        value: "1"
+
+      # sync: false means Render prompts for these instead of storing them in
+      # this file. Nothing secret is ever committed.
+      - key: PGHOST
+        sync: false
+      - key: PGDATABASE
+        sync: false
+      - key: APP_DB_USER
+        sync: false
+      - key: APP_DB_PASSWORD
+        sync: false
+      - key: HF_TOKEN
+        sync: false
