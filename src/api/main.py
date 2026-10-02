@@ -47,7 +47,7 @@ from fastapi import FastAPI, File, HTTPException, Request, Response, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 
-from src.api.observability import metrics, log_structured_event
+from src.api.observability import metrics, log_structured_event, trace_llm_query, trace_voice_transcription
 from src.api.backends import build_model
 from src.api.schemas import (
     AttemptInfo,
@@ -263,6 +263,18 @@ def query(request: Request, body: QueryRequest) -> QueryResponse:
         total_ms=round((time.perf_counter() - started) * 1000, 2),
         error_stage=result.error_stage,
     )
+    trace_llm_query(
+        question=body.question,
+        model_name=service.model.model_id,
+        sql=result.sql,
+        ok=result.ok,
+        repaired=result.repaired,
+        row_count=result.row_count,
+        generation_ms=result.generation_ms,
+        execution_ms=result.execution_ms,
+        total_ms=round((time.perf_counter() - started) * 1000, 2),
+        error_stage=result.error_stage,
+    )
     log_structured_event("query_processed", {
         "question": body.question,
         "ok": result.ok,
@@ -419,6 +431,7 @@ async def voice(audio: UploadFile = File(...)) -> VoiceResponse:
         raise HTTPException(status_code=422, detail="Could not transcribe audio — try again")
 
     metrics.record_voice()
+    trace_voice_transcription(transcript=transcript, word_count=len(transcript.split()))
     log_structured_event("voice_transcribed", {
         "words": len(transcript.split()),
         "length_chars": len(transcript),

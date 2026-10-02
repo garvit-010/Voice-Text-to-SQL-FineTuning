@@ -1,7 +1,9 @@
-"""Production Observability & Metrics for the Text-to-SQL API.
+"""Production Observability, Langfuse Tracing & Metrics for Text-to-SQL API.
 
-Provides structured JSON log tracing, in-memory operational metrics collection
-for the /metrics endpoint, and optional Langfuse tracing hooks.
+Provides:
+- In-memory operational metrics collection for /metrics endpoint
+- Structured JSON logging for cloud log aggregation
+- Full Langfuse LLM tracing & telemetry (spans, generations, execution scoring)
 """
 
 from __future__ import annotations
@@ -124,17 +126,94 @@ def log_structured_event(event_type: str, data: Dict[str, Any]) -> None:
     log.info("OBSERVABILITY_EVENT: %s", json.dumps(payload))
 
 
+# --- Langfuse LLM Tracing ---
+
+_langfuse_client = None
+_langfuse_init_attempted = False
+_langfuse_lock = threading.Lock()
+
+
 def get_langfuse_client() -> Optional[Any]:
-    """Optional Langfuse client initialized if credentials are present."""
-    pk = os.getenv("LANGFUSE_PUBLIC_KEY", "").strip()
-    sk = os.getenv("LANGFUSE_SECRET_KEY", "").strip()
-    if pk and sk:
-        try:
-            from langfuse import Langfuse
-            host = os.getenv("LANGFUSE_HOST", "https://cloud.langfuse.com").strip()
-            return Langfuse(public_key=pk, secret_key=sk, host=host)
-        except ImportError:
-            log.warning("langfuse SDK not installed; skipping Langfuse tracing")
-        except Exception as e:
-            log.warning("Failed to initialize Langfuse client: %s", e)
-    return None
+    """Lazy initialize and return the global Langfuse client instance."""
+    global _langfuse_client, _langfuse_init_attempted
+    with _langfuse_lock:
+        if not _langfuse_init_attempted:
+            _langfuse_init_attempted = True
+            pk = os.getenv("LANGFUSE_PUBLIC_KEY", "").strip()
+            sk = os.getenv("LANGFUSE_SECRET_KEY", "").strip()
+            if pk and sk:
+                try:
+                    from langfuse import Langfuse
+                    host = os.getenv("LANGFUSE_HOST", "https://cloud.langfuse.com").strip()
+                    _langfuse_client = Langfuse(public_key=pk, secret_key=sk, host=host)
+                    log.info("Langfuse tracing initialized successfully (host=%s)", host)
+                except ImportError:
+                    log.warning("langfuse SDK not installed; tracing disabled")
+                except Exception as e:
+                    log.warning("Failed to initialize Langfuse client: %s", e)
+    return _langfuse_client
+
+
+def trace_llm_query(
+    question: str,
+    model_name: str,
+    sql: str,
+    ok: bool,
+    repaired: bool = False,
+    row_count: int = 0,
+    generation_ms: float = 0.0,
+    execution_ms: float = 0.0,
+    total_ms: float = 0.0,
+    error_stage: Optional[str] = None,
+) -> None:
+    """Record a complete LLM text-to-SQL trace with Langfuse."""
+    lf = get_langfuse_client()
+    if not lf:
+        return
+
+    try:
+        trace = lf.trace(
+            name="text-to-sql-query",
+            input={"question": question},
+            output={"sql": sql, "ok": ok, "row_count": row_count},
+            metadata={
+                "model": model_name,
+                "repaired": repaired,
+                "error_stage": error_stage,
+                "generation_ms": generation_ms,
+                "execution_ms": execution_ms,
+                "total_ms": total_ms,
+            },
+        )
+        trace.generation(
+            name="sql-generation",
+            model=model_name,
+            input=question,
+            output=sql,
+            metadata={"repaired": repaired},
+        )
+        trace.score(
+            name="execution_accuracy",
+            value=1.0 if ok else 0.0,
+            comment=f"Error stage: {error_stage}" if not ok else "Executed successfully",
+        )
+        lf.flush()
+    except Exception as exc:
+        log.warning("Failed to send trace to Langfuse: %s", exc)
+
+
+def trace_voice_transcription(transcript: str, word_count: int) -> None:
+    """Record a voice transcription trace with Langfuse."""
+    lf = get_langfuse_client()
+    if not lf:
+        return
+
+    try:
+        lf.trace(
+            name="voice-transcription",
+            input="audio_file",
+            output={"transcript": transcript, "word_count": word_count},
+        )
+        lf.flush()
+    except Exception as exc:
+        log.warning("Failed to send voice trace to Langfuse: %s", exc)
