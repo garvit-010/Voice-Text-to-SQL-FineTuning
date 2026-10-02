@@ -21,7 +21,6 @@ Usage (from the project root):
 from __future__ import annotations
 
 import json
-import shutil
 import argparse
 import sys
 from pathlib import Path
@@ -47,8 +46,8 @@ CONFIGS = [
 def load_jsonl(path: Path) -> list[dict]:
     if not path.exists():
         return []
-    return [json.loads(l) for l in path.read_text(encoding="utf-8").splitlines()
-            if l.strip()]
+    return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines()
+            if line.strip()]
 
 
 def main() -> int:

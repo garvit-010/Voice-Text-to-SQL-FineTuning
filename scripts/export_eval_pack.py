@@ -200,8 +200,10 @@ def main() -> int:
     if args.retrieval != "none":
         combined = hashlib.sha256()
         for q in questions:
-            combined.update(q["id"].encode()); combined.update(bytes([0]))
-            combined.update(q["schema"].encode()); combined.update(bytes([1]))
+            combined.update(q["id"].encode())
+        combined.update(bytes([0]))
+            combined.update(q["schema"].encode())
+        combined.update(bytes([1]))
         shipped_schema_fp = combined.hexdigest()[:16]
     else:
         shipped_schema_fp = schema_fp

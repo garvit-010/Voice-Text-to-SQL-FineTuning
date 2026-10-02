@@ -394,7 +394,7 @@ def write_report(results_path: Path, all_rows: list[dict], failures: list[dict],
     a("")
     seen: set[str] = set()
     for f in failures:
-        key = f["bucket"] + ":" + str(f.get("tag"))
+        _key = f["bucket"] + ":" + str(f.get("tag"))
         if f["bucket"] in seen:
             continue
         seen.add(f["bucket"])

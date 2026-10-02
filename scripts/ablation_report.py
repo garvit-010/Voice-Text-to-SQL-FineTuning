@@ -107,9 +107,9 @@ def load_configs(experiments: Path) -> list[Config]:
         cfg.summary = json.loads(summary_path.read_text(encoding="utf-8"))
         results_path = directory / "results.jsonl"
         if results_path.exists():
-            cfg.results = [json.loads(l) for l
+            cfg.results = [json.loads(line) for line
                            in results_path.read_text(encoding="utf-8").splitlines()
-                           if l.strip()]
+                           if line.strip()]
     return CONFIGS
 
 
@@ -168,9 +168,9 @@ def main() -> int:
     measured = [c for c in configs if c.measured]
     gold = {}
     if TEST_SET.exists():
-        gold = {json.loads(l)["id"]: json.loads(l)
-                for l in TEST_SET.read_text(encoding="utf-8").splitlines()
-                if l.strip()}
+        gold = {json.loads(line)["id"]: json.loads(line)
+                for line in TEST_SET.read_text(encoding="utf-8").splitlines()
+                if line.strip()}
 
     print("=" * 78)
     print(f"PHASE 14 - ABLATION STUDY  (benchmark {version.name})")

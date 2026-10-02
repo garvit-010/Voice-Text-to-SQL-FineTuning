@@ -103,8 +103,8 @@ def main() -> int:
     fp = repair_prompt_fingerprint()
     print(f"repair prompt   : {REPAIR_PROMPT_VERSION}  {fp}")
 
-    rows = [json.loads(l) for l in results_path.read_text(encoding="utf-8").splitlines()
-            if l.strip()]
+    rows = [json.loads(line) for line in results_path.read_text(encoding="utf-8").splitlines()
+            if line.strip()]
     print(f"scored results  : {results_path.relative_to(PROJECT_ROOT)} "
           f"({len(rows):,} examples)")
 

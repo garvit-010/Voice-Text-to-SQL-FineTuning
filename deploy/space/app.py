@@ -266,7 +266,7 @@ def ask(question: str):
     try:
         raw = generate(question)
     except Exception as exc:  # noqa: BLE001 - surfaced to the user, not swallowed
-        return "", f"### Generation failed" + chr(10)*2 + f"`{type(exc).__name__}: {exc}`", "", None
+        return "", "### Generation failed" + chr(10)*2 + f"`{type(exc).__name__}: {exc}`", "", None
     elapsed = (time.perf_counter() - started) * 1000
 
     sql = extract_sql(raw)
