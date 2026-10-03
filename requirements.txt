@@ -29,3 +29,4 @@ ruff==0.6.9                 # Linter for CI pipeline
 # --- Phase 13 & 14: LLM Observability & Evaluation ---
 langfuse==4.16.0            # LLM tracing, prompt versioning & telemetry
 jiwer==4.0.0               # Word Error Rate (WER) evaluation for voice STT
+langsmith==0.14.4            # LangSmith LLM tracing & evaluation telemetry

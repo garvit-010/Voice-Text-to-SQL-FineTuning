@@ -1,9 +1,9 @@
-"""Production Observability, Langfuse Tracing & Metrics for Text-to-SQL API.
+"""Production Observability, Langfuse & LangSmith Tracing & Metrics.
 
 Provides:
 - In-memory operational metrics collection for /metrics endpoint
 - Structured JSON logging for cloud log aggregation
-- Full Langfuse LLM tracing & telemetry (spans, generations, execution scoring)
+- Multi-provider LLM Telemetry (Langfuse & LangSmith tracing support)
 """
 
 from __future__ import annotations
@@ -126,7 +126,7 @@ def log_structured_event(event_type: str, data: Dict[str, Any]) -> None:
     log.info("OBSERVABILITY_EVENT: %s", json.dumps(payload))
 
 
-# --- Langfuse LLM Tracing ---
+# --- Langfuse Tracing ---
 
 _langfuse_client = None
 _langfuse_init_attempted = False
@@ -134,7 +134,6 @@ _langfuse_lock = threading.Lock()
 
 
 def get_langfuse_client() -> Optional[Any]:
-    """Lazy initialize and return the global Langfuse client instance."""
     global _langfuse_client, _langfuse_init_attempted
     with _langfuse_lock:
         if not _langfuse_init_attempted:
@@ -147,11 +146,35 @@ def get_langfuse_client() -> Optional[Any]:
                     host = os.getenv("LANGFUSE_HOST", "https://cloud.langfuse.com").strip()
                     _langfuse_client = Langfuse(public_key=pk, secret_key=sk, host=host)
                     log.info("Langfuse tracing initialized successfully (host=%s)", host)
-                except ImportError:
-                    log.warning("langfuse SDK not installed; tracing disabled")
                 except Exception as e:
                     log.warning("Failed to initialize Langfuse client: %s", e)
     return _langfuse_client
+
+
+# --- LangSmith Tracing ---
+
+_langsmith_client = None
+_langsmith_init_attempted = False
+_langsmith_lock = threading.Lock()
+
+
+def get_langsmith_client() -> Optional[Any]:
+    global _langsmith_client, _langsmith_init_attempted
+    with _langsmith_lock:
+        if not _langsmith_init_attempted:
+            _langsmith_init_attempted = True
+            api_key = (
+                os.getenv("LANGSMITH_API_KEY", "").strip()
+                or os.getenv("LANGCHAIN_API_KEY", "").strip()
+            )
+            if api_key:
+                try:
+                    from langsmith import Client
+                    _langsmith_client = Client(api_key=api_key)
+                    log.info("LangSmith tracing client initialized successfully")
+                except Exception as e:
+                    log.warning("Failed to initialize LangSmith client: %s", e)
+    return _langsmith_client
 
 
 def trace_llm_query(
@@ -166,54 +189,101 @@ def trace_llm_query(
     total_ms: float = 0.0,
     error_stage: Optional[str] = None,
 ) -> None:
-    """Record a complete LLM text-to-SQL trace with Langfuse."""
-    lf = get_langfuse_client()
-    if not lf:
-        return
+    """Record LLM text-to-SQL traces to active observability platforms (Langfuse / LangSmith)."""
 
-    try:
-        trace = lf.trace(
-            name="text-to-sql-query",
-            input={"question": question},
-            output={"sql": sql, "ok": ok, "row_count": row_count},
-            metadata={
-                "model": model_name,
-                "repaired": repaired,
-                "error_stage": error_stage,
-                "generation_ms": generation_ms,
-                "execution_ms": execution_ms,
-                "total_ms": total_ms,
-            },
-        )
-        trace.generation(
-            name="sql-generation",
-            model=model_name,
-            input=question,
-            output=sql,
-            metadata={"repaired": repaired},
-        )
-        trace.score(
-            name="execution_accuracy",
-            value=1.0 if ok else 0.0,
-            comment=f"Error stage: {error_stage}" if not ok else "Executed successfully",
-        )
-        lf.flush()
-    except Exception as exc:
-        log.warning("Failed to send trace to Langfuse: %s", exc)
+    # 1. Langfuse
+    lf = get_langfuse_client()
+    if lf:
+        try:
+            trace = lf.trace(
+                name="text-to-sql-query",
+                input={"question": question},
+                output={"sql": sql, "ok": ok, "row_count": row_count},
+                metadata={
+                    "model": model_name,
+                    "repaired": repaired,
+                    "error_stage": error_stage,
+                    "generation_ms": generation_ms,
+                    "execution_ms": execution_ms,
+                    "total_ms": total_ms,
+                },
+            )
+            trace.generation(
+                name="sql-generation",
+                model=model_name,
+                input=question,
+                output=sql,
+                metadata={"repaired": repaired},
+            )
+            trace.score(
+                name="execution_accuracy",
+                value=1.0 if ok else 0.0,
+                comment=f"Error stage: {error_stage}" if not ok else "Executed successfully",
+            )
+            lf.flush()
+        except Exception as exc:
+            log.warning("Failed to send trace to Langfuse: %s", exc)
+
+    # 2. LangSmith
+    ls = get_langsmith_client()
+    if ls:
+        try:
+            project_name = (
+                os.getenv("LANGSMITH_PROJECT", "").strip()
+                or os.getenv("LANGCHAIN_PROJECT", "voice-text-to-sql").strip()
+            )
+            ls.create_run(
+                name="text-to-sql-query",
+                run_type="llm",
+                inputs={"question": question},
+                outputs={"sql": sql, "ok": ok, "row_count": row_count},
+                project_name=project_name,
+                extra={
+                    "metadata": {
+                        "model": model_name,
+                        "repaired": repaired,
+                        "error_stage": error_stage,
+                        "generation_ms": generation_ms,
+                        "execution_ms": execution_ms,
+                        "total_ms": total_ms,
+                        "execution_accuracy": 1.0 if ok else 0.0,
+                    }
+                },
+            )
+        except Exception as exc:
+            log.warning("Failed to send trace to LangSmith: %s", exc)
 
 
 def trace_voice_transcription(transcript: str, word_count: int) -> None:
-    """Record a voice transcription trace with Langfuse."""
-    lf = get_langfuse_client()
-    if not lf:
-        return
+    """Record voice transcription traces to active observability platforms."""
 
-    try:
-        lf.trace(
-            name="voice-transcription",
-            input="audio_file",
-            output={"transcript": transcript, "word_count": word_count},
-        )
-        lf.flush()
-    except Exception as exc:
-        log.warning("Failed to send voice trace to Langfuse: %s", exc)
+    # 1. Langfuse
+    lf = get_langfuse_client()
+    if lf:
+        try:
+            lf.trace(
+                name="voice-transcription",
+                input="audio_file",
+                output={"transcript": transcript, "word_count": word_count},
+            )
+            lf.flush()
+        except Exception as exc:
+            log.warning("Failed to send voice trace to Langfuse: %s", exc)
+
+    # 2. LangSmith
+    ls = get_langsmith_client()
+    if ls:
+        try:
+            project_name = (
+                os.getenv("LANGSMITH_PROJECT", "").strip()
+                or os.getenv("LANGCHAIN_PROJECT", "voice-text-to-sql").strip()
+            )
+            ls.create_run(
+                name="voice-transcription",
+                run_type="tool",
+                inputs={"audio": "uploaded_audio"},
+                outputs={"transcript": transcript, "word_count": word_count},
+                project_name=project_name,
+            )
+        except Exception as exc:
+            log.warning("Failed to send voice trace to LangSmith: %s", exc)

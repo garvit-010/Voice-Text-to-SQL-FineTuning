@@ -85,3 +85,9 @@ services:
         sync: false
       - key: LANGFUSE_HOST
         sync: false
+      - key: LANGSMITH_TRACING
+        value: "true"
+      - key: LANGSMITH_API_KEY
+        sync: false
+      - key: LANGSMITH_PROJECT
+        value: "voice-text-to-sql"
