@@ -91,3 +91,5 @@ services:
         sync: false
       - key: LANGSMITH_PROJECT
         value: "voice-text-to-sql"
+      - key: LANGSMITH_ENDPOINT
+        value: "https://apac.api.smith.langchain.com"

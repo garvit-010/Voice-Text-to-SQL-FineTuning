@@ -173,8 +173,14 @@ def get_langsmith_client() -> Optional[Any]:
             if api_key:
                 try:
                     from langsmith import Client
-                    _langsmith_client = Client(api_key=api_key)
-                    log.info("LangSmith tracing client initialized successfully")
+                    endpoint = os.getenv("LANGSMITH_ENDPOINT", "").strip()
+                    if endpoint:
+                        os.environ["LANGSMITH_ENDPOINT"] = endpoint
+                        _langsmith_client = Client(api_key=api_key, url=endpoint)
+                        log.info("LangSmith tracing client initialized for endpoint: %s", endpoint)
+                    else:
+                        _langsmith_client = Client(api_key=api_key)
+                        log.info("LangSmith tracing client initialized successfully")
                 except Exception as e:
                     log.warning("Failed to initialize LangSmith client: %s", e)
     return _langsmith_client
