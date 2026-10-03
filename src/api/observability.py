@@ -173,10 +173,11 @@ def get_langsmith_client() -> Optional[Any]:
             if api_key:
                 try:
                     from langsmith import Client
-                    endpoint = os.getenv("LANGSMITH_ENDPOINT", "").strip()
+                    endpoint = os.getenv("LANGSMITH_ENDPOINT", "").strip() or os.getenv("LANGCHAIN_ENDPOINT", "").strip()
                     if endpoint:
                         os.environ["LANGSMITH_ENDPOINT"] = endpoint
-                        _langsmith_client = Client(api_key=api_key, url=endpoint)
+                        os.environ["LANGCHAIN_ENDPOINT"] = endpoint
+                        _langsmith_client = Client(api_key=api_key, api_url=endpoint)
                         log.info("LangSmith tracing client initialized for endpoint: %s", endpoint)
                     else:
                         _langsmith_client = Client(api_key=api_key)
