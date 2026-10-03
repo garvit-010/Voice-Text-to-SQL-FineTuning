@@ -3,7 +3,7 @@
 Provides:
 - In-memory operational metrics collection for /metrics endpoint
 - Structured JSON logging for cloud log aggregation
-- Multi-provider LLM Telemetry (Langfuse & LangSmith RunTree tracing for HuggingFace / custom models)
+- Multi-provider LLM Telemetry (Langfuse & LangSmith tracing support)
 """
 
 from __future__ import annotations
@@ -151,6 +151,35 @@ def get_langfuse_client() -> Optional[Any]:
     return _langfuse_client
 
 
+# --- LangSmith Tracing ---
+
+_langsmith_client = None
+_langsmith_init_attempted = False
+_langsmith_disabled = False
+_langsmith_lock = threading.Lock()
+
+
+def get_langsmith_client() -> Optional[Any]:
+    global _langsmith_client, _langsmith_init_attempted, _langsmith_disabled
+    with _langsmith_lock:
+        if _langsmith_disabled:
+            return None
+        if not _langsmith_init_attempted:
+            _langsmith_init_attempted = True
+            api_key = (
+                os.getenv("LANGSMITH_API_KEY", "").strip()
+                or os.getenv("LANGCHAIN_API_KEY", "").strip()
+            )
+            if api_key:
+                try:
+                    from langsmith import Client
+                    _langsmith_client = Client(api_key=api_key)
+                    log.info("LangSmith tracing client initialized successfully")
+                except Exception as e:
+                    log.warning("Failed to initialize LangSmith client: %s", e)
+    return _langsmith_client
+
+
 def trace_llm_query(
     question: str,
     model_name: str,
@@ -195,27 +224,19 @@ def trace_llm_query(
                 comment=f"Error stage: {error_stage}" if not ok else "Executed successfully",
             )
             lf.flush()
-            log.info("Langfuse trace sent for question: %r", question[:30])
         except Exception as exc:
             log.warning("Failed to send trace to Langfuse: %s", exc)
 
-    # 2. LangSmith Tracing via RunTree
-    ls_api_key = (
-        os.getenv("LANGSMITH_API_KEY", "").strip()
-        or os.getenv("LANGCHAIN_API_KEY", "").strip()
-    )
-    if ls_api_key:
+    # 2. LangSmith Tracing
+    global _langsmith_disabled
+    ls = get_langsmith_client()
+    if ls and not _langsmith_disabled:
         try:
-            from langsmith import RunTree
             project_name = (
                 os.getenv("LANGSMITH_PROJECT", "").strip()
                 or os.getenv("LANGCHAIN_PROJECT", "voice-text-to-sql").strip()
             )
-            # Ensure environment variables are visible to RunTree
-            os.environ["LANGSMITH_API_KEY"] = ls_api_key
-            os.environ["LANGCHAIN_API_KEY"] = ls_api_key
-
-            rt = RunTree(
+            ls.create_run(
                 name="text-to-sql-query",
                 run_type="llm",
                 inputs={"question": question},
@@ -233,10 +254,12 @@ def trace_llm_query(
                     }
                 },
             )
-            rt.post()
-            log.info("LangSmith RunTree trace posted successfully for question: %r", question[:30])
         except Exception as exc:
-            log.warning("Failed to send trace to LangSmith RunTree: %s", exc)
+            if "Forbidden" in str(exc) or "403" in str(exc):
+                log.error("LangSmith returned 403 Forbidden. Check LANGSMITH_API_KEY in environment. Disabling LangSmith tracing.")
+                _langsmith_disabled = True
+            else:
+                log.warning("Failed to send trace to LangSmith: %s", exc)
 
 
 def trace_voice_transcription(transcript: str, word_count: int) -> None:
@@ -256,24 +279,24 @@ def trace_voice_transcription(transcript: str, word_count: int) -> None:
             log.warning("Failed to send voice trace to Langfuse: %s", exc)
 
     # 2. LangSmith
-    ls_api_key = (
-        os.getenv("LANGSMITH_API_KEY", "").strip()
-        or os.getenv("LANGCHAIN_API_KEY", "").strip()
-    )
-    if ls_api_key:
+    global _langsmith_disabled
+    ls = get_langsmith_client()
+    if ls and not _langsmith_disabled:
         try:
-            from langsmith import RunTree
             project_name = (
                 os.getenv("LANGSMITH_PROJECT", "").strip()
                 or os.getenv("LANGCHAIN_PROJECT", "voice-text-to-sql").strip()
             )
-            rt = RunTree(
+            ls.create_run(
                 name="voice-transcription",
                 run_type="tool",
                 inputs={"audio": "uploaded_audio"},
                 outputs={"transcript": transcript, "word_count": word_count},
                 project_name=project_name,
             )
-            rt.post()
         except Exception as exc:
-            log.warning("Failed to send voice trace to LangSmith: %s", exc)
+            if "Forbidden" in str(exc) or "403" in str(exc):
+                log.error("LangSmith returned 403 Forbidden. Disabling LangSmith tracing.")
+                _langsmith_disabled = True
+            else:
+                log.warning("Failed to send voice trace to LangSmith: %s", exc)
