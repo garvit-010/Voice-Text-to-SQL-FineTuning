@@ -24,9 +24,9 @@ psycopg-pool==3.2.4         # connection pool; every connection is configured
                             # read-only with a statement timeout on checkout
 httpx==0.28.1               # required by fastapi.testclient
 python-multipart==0.0.20    # required for file upload in /voice endpoint
-google-genai==0.3.0         # Google Gemini SDK for speech-to-text
+google-genai>=0.8.0         # Google Gemini SDK for speech-to-text
 ruff==0.6.9                 # Linter for CI pipeline
 # --- Phase 13 & 14: LLM Observability & Evaluation ---
 langfuse==4.16.0            # LLM tracing, prompt versioning & telemetry
 jiwer==4.0.0               # Word Error Rate (WER) evaluation for voice STT
-langsmith==0.14.4            # LangSmith LLM tracing & evaluation telemetry
+langsmith>=0.1.0            # LangSmith LLM tracing & evaluation telemetry
