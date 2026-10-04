@@ -52,29 +52,25 @@ All numbers are measured on the same 453 held-out test examples, evaluated by ex
 
 ## Architecture
 
-```
-Audio / Text
-     |
-     v
-[Voice Endpoint]  -- Gemini Speech / Whisper / HF Whisper-large-v3
-     |
-     v
-[Text-to-SQL Service]
-  - Schema context builder (full schema, 5,455 chars)
-  - Prompt v1 / v2 (fingerprinted, version-controlled)
-  - QLoRA adapter via HuggingFace Inference Providers
-  - Static SQL validator (sqlglot: parse, read-only, real tables/columns)
-  - PostgreSQL executor (read-only session, 30s timeout)
-  - Repair loop (one attempt on failure, error fed back to model)
-     |
-     v
-[FastAPI — POST /query, POST /voice, GET /health, GET /metrics]
-     |
-     v
-[Render Web Service] <--> [Neon PostgreSQL (61 MB enterprise schema)]
-     |
-     v
-[LangSmith Tracing] + [In-memory /metrics] + [Structured JSON logs]
+```mermaid
+flowchart TD
+    Q["Business question<br/><i>Who are the top 15 customers by revenue?</i>"] --> P[Prompt + full schema<br/>frozen template]
+    P --> M["Qwen3-8B + QLoRA adapter"]
+    M --> S[Generated SQL]
+    S --> V{"Static validation<br/>parseable? one statement?<br/>read-only? real tables?"}
+    V -->|rejected| R
+    V -->|passes| X{"Neon DB<br/>read-only, 30s timeout"}
+    X -->|error| R["Self-correction<br/>database error fed back"]
+    X -->|success| OUT([Rows])
+    R --> M2["Qwen3-8B + adapter<br/>repair prompt"]
+    M2 --> X2{"Neon DB"}
+    X2 -->|success| OUT
+    X2 -->|still fails| FAIL([Reported as failed])
+
+    style M fill:#c8623a,color:#fff
+    style M2 fill:#c8623a,color:#fff
+    style OUT fill:#2f7d52,color:#fff
+    style FAIL fill:#b3402f,color:#fff
 ```
 
 **Deployment:** The service runs the base model (43.71%) behind prompt v2 on Render's free tier. The fine-tuned adapter (70.86%) requires GPU and is served via the Hugging Face Space.
