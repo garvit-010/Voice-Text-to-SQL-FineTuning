@@ -30,10 +30,13 @@ services:
       - key: PYTHONPATH
         value: "."
 
-      # Serves the BASE model. The fine-tuned adapter needs a GPU, which the
-      # free tier does not have, so this is NOT the 70.86 % pipeline.
+      # Serves the FINE-TUNED QLoRA adapter via Hugging Face Space (ZeroGPU).
+      # ZeroGPU dynamically allocates an A100 GPU for each query, running the
+      # full 70.86 % fine-tuned adapter pipeline with zero GPU costs on Render.
       - key: MODEL_BACKEND
-        value: hf
+        value: hf_space
+      - key: HF_SPACE_ID
+        value: garvit-010/enterprise-text-to-sql
       # Prompt v2 adds a business glossary and a DATA_AS_OF reference date.
       # Costs nothing, needs no GPU, and is worth +9.47 pp to the base model
       # (34.22 % -> 43.71 % strict, both scored on benchmark v2).
@@ -48,7 +51,7 @@ services:
       # A person is waiting, so a dead provider is abandoned in seconds rather
       # than the 120 s a benchmark run can afford.
       - key: HF_TIMEOUT_S
-        value: "30"
+        value: "60"
       - key: HF_MAX_RETRIES
         value: "4"
 

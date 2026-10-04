@@ -6,6 +6,7 @@ Three backends, selected by the ``MODEL_BACKEND`` environment variable:
 
 | backend | what it serves | where it runs |
 | --- | --- | --- |
+| ``hf_space`` | fine-tuned QLoRA adapter via HF Space (ZeroGPU) | free ZeroGPU on HF |
 | ``hf`` | base Qwen3-8B via HF Inference Providers | anywhere, needs `HF_TOKEN` |
 | ``local`` | base + the Phase 9 LoRA adapter, 4-bit | a CUDA host |
 | ``stub`` | canned SQL, no model at all | tests and CI |
@@ -218,6 +219,102 @@ class LocalAdapterModel(TextToSQLModel):
         }
 
 
+class HFSpaceModel(TextToSQLModel):
+    """Hits the fine-tuned QLoRA adapter running on Hugging Face Spaces (ZeroGPU).
+
+    ZeroGPU dynamically allocates an A100 GPU for each query, running the full
+    70.86 % fine-tuned adapter pipeline without requiring a paid dedicated GPU on Render.
+    Communicates via Gradio's standard SSE API over HTTP (using httpx).
+    """
+
+    def __init__(
+        self,
+        space_id: str = "garvit-010/enterprise-text-to-sql",
+        hf_token: str | None = None,
+        timeout_s: float = 60.0,
+        prompt=None,
+    ) -> None:
+        self.space_id = space_id
+        # Convert repository format "garvit-010/enterprise-text-to-sql" to subdomain format:
+        subdomain = space_id.replace("/", "-").lower()
+        self.base_url = f"https://{subdomain}.hf.space"
+        self.hf_token = hf_token or os.getenv("HF_TOKEN")
+        self.timeout_s = timeout_s
+        self.model_id = f"{space_id} (ZeroGPU)"
+        self.prompt = prompt or resolve_prompt()
+
+    def generate(self, question: str, schema: str = "") -> GenerationResult:
+        import json
+        import httpx
+
+        headers = {}
+        if self.hf_token:
+            headers["Authorization"] = f"Bearer {self.hf_token}"
+
+        started = time.perf_counter()
+        try:
+            with httpx.Client(timeout=self.timeout_s) as client:
+                call_res = client.post(
+                    f"{self.base_url}/gradio_api/call/ask",
+                    json={"data": [question]},
+                    headers=headers,
+                )
+                call_res.raise_for_status()
+                event_id = call_res.json().get("event_id")
+                if not event_id:
+                    raise RuntimeError(f"HF Space did not return an event_id: {call_res.text}")
+
+                sql = ""
+                raw = ""
+                with client.stream("GET", f"{self.base_url}/gradio_api/call/ask/{event_id}", headers=headers) as stream:
+                    for line in stream.iter_lines():
+                        if line.startswith("data:"):
+                            payload = json.loads(line[5:])
+                            if isinstance(payload, list) and len(payload) > 0:
+                                sql = str(payload[0]) if payload[0] is not None else ""
+                                raw = str(payload[2]) if len(payload) > 2 and payload[2] is not None else sql
+                            break
+
+                elapsed = (time.perf_counter() - started) * 1000
+                cleaned_sql = sql or extract_sql(raw)
+                return GenerationResult(
+                    sql=cleaned_sql,
+                    raw_output=raw,
+                    latency_ms=elapsed,
+                    ok=bool(cleaned_sql),
+                    provider="hf-space-zerogpu",
+                )
+        except Exception as exc:
+            elapsed = (time.perf_counter() - started) * 1000
+            return GenerationResult(
+                sql="",
+                raw_output=str(exc),
+                latency_ms=elapsed,
+                ok=False,
+                error=f"HF Space error: {exc}",
+                provider="hf-space-zerogpu",
+            )
+
+    def generate_messages(self, messages: list[dict[str, str]]) -> GenerationResult:
+        question = ""
+        for m in reversed(messages):
+            if m.get("role") == "user":
+                question = m.get("content", "")
+                break
+        if not question and messages:
+            question = messages[-1].get("content", "")
+        return self.generate(question)
+
+    def describe(self) -> dict[str, Any]:
+        return {
+            "kind": "hf_space_zerogpu",
+            "space_id": self.space_id,
+            "url": self.base_url,
+            "fine_tuned": True,
+            "adapter_repo": "garvit-010/qwen3-8b-text2sql-qlora-v3",
+        }
+
+
 def build_model(backend: str | None = None) -> TextToSQLModel:
     """Construct the configured backend.
 
@@ -230,6 +327,16 @@ def build_model(backend: str | None = None) -> TextToSQLModel:
     builders: dict[str, Callable[[], TextToSQLModel]] = {
         "stub": lambda: StubModel(),
         "hf": lambda: _build_hf(),
+        "hf_space": lambda: HFSpaceModel(
+            space_id=os.getenv("HF_SPACE_ID", "garvit-010/enterprise-text-to-sql"),
+            hf_token=os.getenv("HF_TOKEN"),
+            timeout_s=float(os.getenv("HF_TIMEOUT_S", "60")),
+        ),
+        "space": lambda: HFSpaceModel(
+            space_id=os.getenv("HF_SPACE_ID", "garvit-010/enterprise-text-to-sql"),
+            hf_token=os.getenv("HF_TOKEN"),
+            timeout_s=float(os.getenv("HF_TIMEOUT_S", "60")),
+        ),
         "local": lambda: LocalAdapterModel(
             adapter_dir=os.getenv(
                 "ADAPTER_DIR", "models/finetuned/final_adapter")),
