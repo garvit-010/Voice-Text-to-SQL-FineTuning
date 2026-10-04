@@ -75,8 +75,8 @@ flowchart TD
 
 **Deployment:** The service runs the base model (43.71%) behind prompt v2 on Render's free tier. The fine-tuned adapter (70.86%) requires GPU and is served via the Hugging Face Space.
 
-- Live API: `https://tinyurl.com/text2sql-ft`
-- Hugging Face Space: `https://tinyurl.com/hf-text2sql-ft`
+- Live API: https://tinyurl.com/text2sql-ft
+- Hugging Face Space: https://tinyurl.com/hf-text2sql-ft
 
 ---
 
