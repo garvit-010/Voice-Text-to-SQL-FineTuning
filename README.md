@@ -1,4 +1,4 @@
-# Voice & Text to SQL — QLoRA Fine-Tuning on Enterprise Data
+# TalkSQL — Voice and Text to SQL QLoRA Fine-Tuning 
 
 A production-grade NLP pipeline that translates natural language questions into PostgreSQL queries against a real enterprise database. Built to close the gap between a raw instruction-tuned model and a specialist: the fine-tuned configuration scores **70.86% strict execution accuracy** on a held-out test set, up from 10.82% with the base model and the same prompt.
 
