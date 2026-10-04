@@ -109,8 +109,8 @@ and the scorer routes on it.
 Then, on the laptop:
 
 ```powershell
-env\Scripts\python.exe scripts/score_finetuned.py --version v2 --predictions "C:\Users\dell\Downloads\predictions_base_v2_final.jsonl"
-env\Scripts\python.exe scripts/score_finetuned.py --version v2 --predictions "C:\Users\dell\Downloads\predictions_v2_final.jsonl"
+env\Scripts\python.exe scripts/score_finetuned.py --version v2 --predictions "downloads\predictions_base_v2_final.jsonl"
+env\Scripts\python.exe scripts/score_finetuned.py --version v2 --predictions "downloads\predictions_v2_final.jsonl"
 ```
 
 Then `score_repair.py --version v2 --repairs repairs.jsonl`,

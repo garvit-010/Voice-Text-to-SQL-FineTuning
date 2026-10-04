@@ -1160,7 +1160,7 @@
     "schema_fingerprint": "d03619e711661bc5",
     "base_model": "Qwen/Qwen3-8B",
     "revision": "b968826d9c46",
-    "adapter_dir": "/kaggle/input/notebooks/thotahari/train-v2/qwen3-8b-text2sql-qlora-v2/final_adapter",
+    "adapter_dir": "/kaggle/input/notebooks/garvit/train-v2/qwen3-8b-text2sql-qlora-v2/final_adapter",
     "model_kind": "qlora_adapter",
     "decoding": "greedy",
     "max_new_tokens": 512,

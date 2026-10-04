@@ -2,8 +2,8 @@
   "config": {
     "model_id": "Qwen/Qwen3-8B",
     "model_revision": "b968826d9c46",
-    "train_file": "/kaggle/input/datasets/thotahari/text2sql-sft-v2/train.jsonl",
-    "val_file": "/kaggle/input/datasets/thotahari/text2sql-sft-v2/validation.jsonl",
+    "train_file": "/kaggle/input/datasets/garvit/text2sql-sft-v2/train.jsonl",
+    "val_file": "/kaggle/input/datasets/garvit/text2sql-sft-v2/validation.jsonl",
     "output_dir": "/kaggle/working/qwen3-8b-text2sql-qlora-v2",
     "max_seq_len": 2048,
     "num_epochs": 1.0,

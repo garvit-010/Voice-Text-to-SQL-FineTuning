@@ -6,7 +6,7 @@ from dotenv import load_dotenv
 
 load_dotenv(Path(__file__).parents[1] / ".env", override=True)
 
-SRC_REPO  = "hari-krishna-ai/qwen3-8b-text2sql-qlora-v2"
+SRC_REPO  = "garvit-010/qwen3-8b-text2sql-qlora-v2"
 DEST_REPO = "garvit-010/qwen3-8b-text2sql-qlora-v3"
 TOKEN     = os.getenv("HF_WRITE_TOKEN", "").strip()
 
